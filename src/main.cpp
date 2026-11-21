@@ -1,7 +1,14 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PauseLayer.hpp>
+#include <Geode/modify/MenuLayer.hpp>
 
 using namespace geode::prelude;
+
+static constexpr int DO_BETTER_LEVEL_ID = 152277985;
+
+// Put r4ndoom's GD account ID here (a number, not the username).
+// While it is 0, the r4ndoom button just shows a "not set" message.
+static constexpr int R4NDOOM_ACCOUNT_ID = 0;
 
 // Uses the first game sprite that exists, otherwise shows text instead.
 static CCNode* frameIcon(std::initializer_list<char const*> names, char const* fallbackText) {
@@ -16,6 +23,48 @@ static CCNode* frameIcon(std::initializer_list<char const*> names, char const* f
     auto label = CCLabelBMFont::create(fallbackText, "bigFont.fnt");
     label->setScale(0.45f);
     return label;
+}
+
+// Purple sideways mirror portal. Uses the game's portal sprite if it is loaded,
+// otherwise draws a purple oval so the button always shows something.
+static CCNode* makeMirrorPortalIcon() {
+    auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+    for (auto name : {"portal_05_front_001.png", "portal_06_front_001.png"}) {
+        if (cache->spriteFrameByName(name)) {
+            auto spr = CCSprite::createWithSpriteFrameName(name);
+            spr->setColor({190, 90, 255});
+            spr->setRotation(270.f); // sideways + upside down
+            spr->setScale(40.f / spr->getContentHeight());
+            return spr;
+        }
+    }
+
+    auto holder = CCNode::create();
+    holder->setContentSize({44.f, 30.f});
+
+    auto makeOval = [](float rx, float ry) {
+        std::vector<CCPoint> pts;
+        for (int i = 0; i < 32; i++) {
+            float a = static_cast<float>(i) / 32.f * 6.2831853f;
+            pts.push_back(ccp(std::cos(a) * rx, std::sin(a) * ry));
+        }
+        return pts;
+    };
+
+    auto draw = CCDrawNode::create();
+    auto outer = makeOval(21.f, 13.f);
+    draw->drawPolygon(
+        outer.data(), static_cast<unsigned int>(outer.size()),
+        ccc4f(0.74f, 0.35f, 1.f, 1.f), 2.f, ccc4f(1.f, 1.f, 1.f, 1.f)
+    );
+    auto inner = makeOval(13.f, 7.f);
+    draw->drawPolygon(
+        inner.data(), static_cast<unsigned int>(inner.size()),
+        ccc4f(0.35f, 0.1f, 0.6f, 1.f), 0.f, ccc4f(0.f, 0.f, 0.f, 0.f)
+    );
+    draw->setPosition({22.f, 15.f});
+    holder->addChild(draw);
+    return holder;
 }
 
 class VerityPopup : public Popup {
@@ -45,6 +94,82 @@ public:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Main menu: reverse mirror portal button above the daily chests
+// ---------------------------------------------------------------------------
+class $modify(LarpMenu, MenuLayer) {
+    struct Fields {
+        CCNode* m_helloBox = nullptr;
+    };
+
+    bool init() {
+        if (!MenuLayer::init()) return false;
+
+        if (!Mod::get()->getSettingValue<bool>("enable-mirror-portal")) return true;
+
+        auto win = CCDirector::get()->getWinSize();
+
+        CCPoint pos = ccp(win.width - 45.f, win.height / 2.f + 40.f);
+        if (auto ref = this->getChildByIDRecursive("daily-chest-button")) {
+            if (ref->getParent()) {
+                auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
+                auto local = this->convertToNodeSpace(world);
+                pos = ccp(local.x, local.y + ref->getScaledContentHeight() / 2.f + 32.f);
+            }
+        }
+
+        auto menu = CCMenu::create();
+        menu->setPosition({0.f, 0.f});
+        menu->setID("larp-mirror-menu"_spr);
+        this->addChild(menu, 50);
+
+        auto btn = CCMenuItemSpriteExtra::create(
+            makeMirrorPortalIcon(), this, menu_selector(LarpMenu::onMirrorPortal)
+        );
+        btn->setID("mirror-portal-button"_spr);
+        btn->setPosition(pos);
+        menu->addChild(btn);
+
+        return true;
+    }
+
+    void onMirrorPortal(CCObject*) {
+        if (m_fields->m_helloBox) {
+            this->unschedule(schedule_selector(LarpMenu::onHideHello));
+            m_fields->m_helloBox->removeFromParent();
+            m_fields->m_helloBox = nullptr;
+        }
+
+        auto win = CCDirector::get()->getWinSize();
+
+        auto box = CCScale9Sprite::create("square02b_001.png", {0.f, 0.f, 80.f, 80.f});
+        box->setContentSize({170.f, 34.f});
+        box->setColor({0, 0, 0});
+        box->setOpacity(170);
+        box->setPosition({win.width / 2.f, 30.f});
+
+        auto label = CCLabelBMFont::create("hello", "bigFont.fnt");
+        label->setScale(0.55f);
+        label->setPosition({85.f, 17.f});
+        box->addChild(label);
+
+        this->addChild(box, 200);
+        m_fields->m_helloBox = box;
+
+        this->scheduleOnce(schedule_selector(LarpMenu::onHideHello), 2.f);
+    }
+
+    void onHideHello(float) {
+        if (m_fields->m_helloBox) {
+            m_fields->m_helloBox->removeFromParent();
+            m_fields->m_helloBox = nullptr;
+        }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Pause menu buttons
+// ---------------------------------------------------------------------------
 class $modify(LarpPause, PauseLayer) {
     struct Fields {
         CCNode* m_refreshIcon = nullptr;
@@ -101,10 +226,11 @@ class $modify(LarpPause, PauseLayer) {
             addLeft(icon, menu_selector(LarpPause::onRefresh), "refresh-button"_spr);
         }
 
-        // Locked vault
+        // Locked vault (open door with the keyhole)
         if (mod->getSettingValue<bool>("enable-vault")) {
             auto icon = frameIcon(
-                {"GJ_safeBtn_001.png", "secretDoorBtn_closed_001.png"}, "Vault"
+                {"secretDoorBtn_open_001.png", "secretDoorBtn_closed_001.png", "GJ_safeBtn_001.png"},
+                "Vault"
             );
             addLeft(icon, menu_selector(LarpPause::onVault), "vault-button"_spr);
         }
@@ -148,6 +274,70 @@ class $modify(LarpPause, PauseLayer) {
                 spr, this, menu_selector(LarpPause::onPauseCenter)
             );
             btn->setID("pause-center-button"_spr);
+            btn->setPosition(pos);
+            menu->addChild(btn);
+        }
+
+        // Do better Like, far right (above the checkbox)
+        if (mod->getSettingValue<bool>("enable-do-better-like")) {
+            auto holder = CCNode::create();
+            holder->setContentSize({56.f, 58.f});
+
+            auto like = frameIcon({"GJ_likeBtn_001.png"}, "Like");
+            like->setPosition({28.f, 40.f});
+            holder->addChild(like);
+
+            auto label = CCLabelBMFont::create("do better", "bigFont.fnt");
+            label->setScale(0.35f);
+            label->setPosition({28.f, 10.f});
+            holder->addChild(label);
+
+            auto btn = CCMenuItemSpriteExtra::create(
+                holder, this, menu_selector(LarpPause::onDoBetterLike)
+            );
+            btn->setID("do-better-like-button"_spr);
+            btn->setPosition({win.width - 40.f, win.height / 2.f + 85.f});
+            menu->addChild(btn);
+        }
+
+        // R4ndoom button, far right (below the checkbox)
+        if (mod->getSettingValue<bool>("enable-r4ndoom")) {
+            CCNode* icon = CCSprite::create("cube_459.png"_spr);
+            if (icon) {
+                icon->setScale(36.f / icon->getContentHeight());
+            } else {
+                auto label = CCLabelBMFont::create("r4ndoom", "bigFont.fnt");
+                label->setScale(0.4f);
+                icon = label;
+            }
+            auto btn = CCMenuItemSpriteExtra::create(
+                icon, this, menu_selector(LarpPause::onR4ndoom)
+            );
+            btn->setID("r4ndoom-button"_spr);
+            btn->setPosition({win.width - 40.f, win.height / 2.f - 85.f});
+            menu->addChild(btn);
+        }
+
+        // Death, above the practice mode button
+        if (mod->getSettingValue<bool>("enable-death")) {
+            CCNode* ref = nullptr;
+            for (auto id : {"practice-button", "practice-mode-button", "exit-practice-button"}) {
+                ref = this->getChildByIDRecursive(id);
+                if (ref) break;
+            }
+
+            CCPoint pos = ccp(win.width - 70.f, 90.f);
+            if (ref && ref->getParent()) {
+                auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
+                auto local = this->convertToNodeSpace(world);
+                pos = ccp(local.x, local.y + ref->getScaledContentHeight() / 2.f + 28.f);
+            }
+
+            auto icon = frameIcon({"spike_01_001.png", "spike_02_001.png"}, "Death");
+            auto btn = CCMenuItemSpriteExtra::create(
+                icon, this, menu_selector(LarpPause::onDeath)
+            );
+            btn->setID("death-button"_spr);
             btn->setPosition(pos);
             menu->addChild(btn);
         }
@@ -212,5 +402,30 @@ class $modify(LarpPause, PauseLayer) {
 
     void onPauseCenter(CCObject*) {
         this->onQuit(nullptr);
+    }
+
+    void onDoBetterLike(CCObject*) {
+        auto level = GJGameLevel::create();
+        level->m_levelID = DO_BETTER_LEVEL_ID;
+        auto scene = LevelInfoLayer::scene(level, false);
+        CCDirector::get()->pushScene(CCTransitionFade::create(0.5f, scene));
+    }
+
+    void onR4ndoom(CCObject*) {
+        if (R4NDOOM_ACCOUNT_ID <= 0) {
+            FLAlertLayer::create(
+                "r4ndoom", "r4ndoom's account ID isn't set in the mod yet.", "OK"
+            )->show();
+            return;
+        }
+        ProfilePage::create(R4NDOOM_ACCOUNT_ID, false)->show();
+    }
+
+    void onDeath(CCObject*) {
+        auto pl = PlayLayer::get();
+        this->onResume(nullptr);
+        if (pl && pl->m_player1) {
+            pl->destroyPlayer(pl->m_player1, pl->m_anticheatSpike);
+        }
     }
 };
