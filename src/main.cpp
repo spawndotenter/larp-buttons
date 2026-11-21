@@ -1,6 +1,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/MenuLayer.hpp>
+#include <Geode/modify/PlayLayer.hpp>
 
 using namespace geode::prelude;
 
@@ -9,6 +10,10 @@ static constexpr int DO_BETTER_LEVEL_ID = 152277985;
 // Put r4ndoom's GD account ID here (a number, not the username).
 // (If this is ever set to 0, the button shows a "not set" message instead.)
 static constexpr int R4NDOOM_ACCOUNT_ID = 25362634;
+
+// Death button: frames to wait (after unpausing) before killing the player.
+static int g_killCountdown = 0;
+static int g_killRetry = 0;
 
 // Uses the first game sprite that exists, otherwise shows text instead.
 static CCNode* frameIcon(std::initializer_list<char const*> names, char const* fallbackText) {
@@ -95,7 +100,30 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Main menu: reverse mirror portal button above the daily chests
+// Death button support: kills the player a few frames after the game unpauses
+// ---------------------------------------------------------------------------
+class $modify(LarpPlay, PlayLayer) {
+    void postUpdate(float dt) {
+        PlayLayer::postUpdate(dt);
+
+        if (g_killCountdown > 0) {
+            g_killCountdown--;
+            if (g_killCountdown == 0 && m_player1 && !m_player1->m_isDead) {
+                PlayLayer::destroyPlayer(m_player1, m_anticheatSpike);
+                g_killRetry = 8;
+            }
+        } else if (g_killRetry > 0) {
+            g_killRetry--;
+            if (g_killRetry == 0 && m_player1 && !m_player1->m_isDead) {
+                // backup attempt in case the first one was ignored
+                PlayLayer::destroyPlayer(m_player1, nullptr);
+            }
+        }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Main menu: reverse mirror portal button above the More Games button
 // ---------------------------------------------------------------------------
 class $modify(LarpMenu, MenuLayer) {
     struct Fields {
@@ -109,8 +137,8 @@ class $modify(LarpMenu, MenuLayer) {
 
         auto win = CCDirector::get()->getWinSize();
 
-        CCPoint pos = ccp(win.width - 45.f, win.height / 2.f + 40.f);
-        if (auto ref = this->getChildByIDRecursive("daily-chest-button")) {
+        CCPoint pos = ccp(win.width - 45.f, 110.f);
+        if (auto ref = this->getChildByIDRecursive("more-games-button")) {
             if (ref->getParent()) {
                 auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
                 auto local = this->convertToNodeSpace(world);
@@ -226,10 +254,10 @@ class $modify(LarpPause, PauseLayer) {
             addLeft(icon, menu_selector(LarpPause::onRefresh), "refresh-button"_spr);
         }
 
-        // Locked vault (open door with the keyhole)
+        // Locked vault
         if (mod->getSettingValue<bool>("enable-vault")) {
             auto icon = frameIcon(
-                {"secretDoorBtn_open_001.png", "secretDoorBtn_closed_001.png", "GJ_safeBtn_001.png"},
+                {"GJ_safeBtn_001.png", "secretDoorBtn_closed_001.png", "secretDoorBtn_open_001.png"},
                 "Vault"
             );
             addLeft(icon, menu_selector(LarpPause::onVault), "vault-button"_spr);
@@ -263,7 +291,7 @@ class $modify(LarpPause, PauseLayer) {
                 auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
                 auto local = this->convertToNodeSpace(world);
                 float h = width / 4.f;
-                pos = ccp(local.x, local.y - ref->getScaledContentHeight() / 2.f - h / 2.f - 10.f);
+                pos = ccp(local.x, local.y - ref->getScaledContentHeight() / 2.f - h / 2.f - 2.f);
             }
 
             auto spr = ButtonSprite::create(
@@ -296,7 +324,17 @@ class $modify(LarpPause, PauseLayer) {
                 holder, this, menu_selector(LarpPause::onDoBetterLike)
             );
             btn->setID("do-better-like-button"_spr);
-            btn->setPosition({win.width - 40.f, win.height / 2.f + 85.f});
+
+            // Between the Normal Mode bar and the settings gear
+            CCPoint likePos = ccp(win.width - 105.f, win.height / 2.f + 95.f);
+            if (auto opts = this->getChildByIDRecursive("options-button")) {
+                if (opts->getParent()) {
+                    auto world = opts->getParent()->convertToWorldSpace(opts->getPosition());
+                    auto local = this->convertToNodeSpace(world);
+                    likePos = ccp(local.x - 70.f, local.y - 30.f);
+                }
+            }
+            btn->setPosition(likePos);
             menu->addChild(btn);
         }
 
@@ -405,6 +443,9 @@ class $modify(LarpPause, PauseLayer) {
     }
 
     void onDoBetterLike(CCObject*) {
+        // Leave the level first so you never come back to a half-paused game.
+        this->onQuit(nullptr);
+
         auto level = GJGameLevel::create();
         level->m_levelID = DO_BETTER_LEVEL_ID;
         auto scene = LevelInfoLayer::scene(level, false);
@@ -422,10 +463,8 @@ class $modify(LarpPause, PauseLayer) {
     }
 
     void onDeath(CCObject*) {
-        auto pl = PlayLayer::get();
+        g_killCountdown = 4;
+        g_killRetry = 0;
         this->onResume(nullptr);
-        if (pl && pl->m_player1) {
-            pl->destroyPlayer(pl->m_player1, pl->m_anticheatSpike);
-        }
     }
 };
