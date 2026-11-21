@@ -4,7 +4,7 @@
     "android": "2.2081",
     "win": "2.2081"
   },
-  "version": "v1.2.0",
+  "version": "v1.2.1",
   "id": "spawndotenter.larpbuttons",
   "name": "Larp Buttons",
   "developer": "spawndotenter",
@@ -18,7 +18,8 @@
     "sprites": [
       "ball.png",
       "cube_459.png",
-      "dice.png"
+      "dice.png",
+      "butter.png"
     ],
     "files": [
       "Kerplunck.mp3"
@@ -123,6 +124,12 @@
       "type": "bool",
       "name": "Rate Level Button",
       "description": "Level page, beneath the play button. Shows \"Rated!\" when clicked.",
+      "default": true
+    },
+    "enable-butter": {
+      "type": "bool",
+      "name": "Butter Button",
+      "description": "Search page, next to the X. Opens a profile.",
       "default": true
     }
   }
