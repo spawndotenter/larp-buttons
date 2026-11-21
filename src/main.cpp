@@ -3,6 +3,8 @@
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 
+#include <random>
+
 using namespace geode::prelude;
 
 static constexpr int DO_BETTER_LEVEL_ID = 152277985;
@@ -10,6 +12,13 @@ static constexpr int DO_BETTER_LEVEL_ID = 152277985;
 // Put r4ndoom's GD account ID here (a number, not the username).
 // (If this is ever set to 0, the button shows a "not set" message instead.)
 static constexpr int R4NDOOM_ACCOUNT_ID = 25362634;
+
+// Random volume from 0% to 100%
+static float randomVolume() {
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<int> dist(0, 100);
+    return static_cast<float>(dist(rng)) / 100.f;
+}
 
 // Death button: frames to wait (after unpausing) before killing the player.
 static int g_killCountdown = 0;
@@ -164,6 +173,8 @@ class $modify(LarpMenu, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
 
+        this->addEasyFaceButton();
+
         if (!Mod::get()->getSettingValue<bool>("enable-mirror-portal")) return true;
 
         auto win = CCDirector::get()->getWinSize();
@@ -190,6 +201,39 @@ class $modify(LarpMenu, MenuLayer) {
         menu->addChild(btn);
 
         return true;
+    }
+
+    void addEasyFaceButton() {
+        if (!Mod::get()->getSettingValue<bool>("enable-easy-face")) return;
+        auto bottom = this->getChildByID("bottom-menu");
+        if (!bottom) return;
+
+        CCNode* icon = nullptr;
+        auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+        for (auto name : {"diffIcon_01_btn_001.png", "diffIcon_01_001.png"}) {
+            if (cache->spriteFrameByName(name)) {
+                icon = CCSprite::createWithSpriteFrameName(name);
+                break;
+            }
+        }
+        if (icon) {
+            icon->setScale(45.f / icon->getContentHeight());
+        } else {
+            auto label = CCLabelBMFont::create("Easy", "bigFont.fnt");
+            label->setScale(0.5f);
+            icon = label;
+        }
+
+        auto btn = CCMenuItemSpriteExtra::create(
+            icon, this, menu_selector(LarpMenu::onEasyFace)
+        );
+        btn->setID("easy-face-button"_spr);
+        bottom->addChild(btn);
+        bottom->updateLayout();
+    }
+
+    void onEasyFace(CCObject*) {
+        // does nothing, on purpose
     }
 
     void onMirrorPortal(CCObject*) {
@@ -419,6 +463,74 @@ class $modify(LarpPause, PauseLayer) {
             btn->setPosition(pos);
             menu->addChild(btn);
         }
+
+        // Dice (random music volume) and "Both?" (random music + SFX), under the music slider
+        if (mod->getSettingValue<bool>("enable-dice")) {
+            CCPoint dicePos = ccp(win.width * 0.34f, 22.f);
+            if (auto slider = this->getChildByIDRecursive("music-slider")) {
+                if (slider->getParent()) {
+                    auto world = slider->getParent()->convertToWorldSpace(slider->getPosition());
+                    auto local = this->convertToNodeSpace(world);
+                    dicePos = ccp(local.x - 40.f, local.y - 33.f);
+                }
+            }
+
+            CCNode* diceIcon = CCSprite::create("dice.png"_spr);
+            if (diceIcon) {
+                diceIcon->setScale(28.f / diceIcon->getContentHeight());
+            } else {
+                auto label = CCLabelBMFont::create("Dice", "bigFont.fnt");
+                label->setScale(0.4f);
+                diceIcon = label;
+            }
+            auto diceBtn = CCMenuItemSpriteExtra::create(
+                diceIcon, this, menu_selector(LarpPause::onDice)
+            );
+            diceBtn->setID("dice-button"_spr);
+            diceBtn->setPosition(dicePos);
+            menu->addChild(diceBtn);
+
+            auto bothSpr = ButtonSprite::create(
+                "Both?", 46, true, "bigFont.fnt", "GJ_button_01.png", 20.f, 0.4f
+            );
+            auto bothBtn = CCMenuItemSpriteExtra::create(
+                bothSpr, this, menu_selector(LarpPause::onBoth)
+            );
+            bothBtn->setID("both-button"_spr);
+            bothBtn->setPosition(ccp(dicePos.x + 50.f, dicePos.y));
+            menu->addChild(bothBtn);
+        }
+    }
+
+    void setMusicVolume(float v) {
+        auto slider = typeinfo_cast<Slider*>(this->getChildByIDRecursive("music-slider"));
+        if (slider) {
+            slider->setValue(v);
+            this->musicSliderChanged(slider->getThumb());
+        } else {
+            FMODAudioEngine::sharedEngine()->setBackgroundMusicVolume(v);
+        }
+    }
+
+    void setSfxVolume(float v) {
+        auto slider = typeinfo_cast<Slider*>(this->getChildByIDRecursive("sfx-slider"));
+        if (slider) {
+            slider->setValue(v);
+            this->sfxSliderChanged(slider->getThumb());
+        } else {
+            FMODAudioEngine::sharedEngine()->setEffectsVolume(v);
+        }
+    }
+
+    void onDice(CCObject*) {
+        // the "chest still has time left" sound, then a random music volume
+        playEffectNow("chestClick.ogg");
+        this->setMusicVolume(randomVolume());
+    }
+
+    void onBoth(CCObject*) {
+        this->setMusicVolume(randomVolume());
+        this->setSfxVolume(randomVolume());
     }
 
     void alignPauseCenter(float) {
