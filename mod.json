@@ -8,15 +8,20 @@
   "id": "spawndotenter.larpbuttons",
   "name": "Larp Buttons",
   "developer": "spawndotenter",
-  "description": "Adds a bunch of useless buttons to the pause menu. Every one can be switched off.",
+  "description": "Adds a bunch of useless buttons to most menus. Every one can be switched off.",
   "links": {
     "homepage": "https://github.com/spawndotenter/larp-buttons",
     "source": "https://github.com/spawndotenter/larp-buttons",
     "community": "https://discord.gg/fyFJvbEnVF"
   },
   "resources": {
-    "sprites": ["ball.png"],
-    "files": ["Kerplunck.mp3"]
+    "sprites": [
+      "ball.png",
+      "cube_459.png"
+    ],
+    "files": [
+      "Kerplunck.mp3"
+    ]
   },
   "settings": {
     "title-buttons": {
@@ -57,6 +62,30 @@
       "type": "bool",
       "name": "Pause Center Button",
       "description": "Below the continue button. Clicking it exits the level.",
+      "default": true
+    },
+    "enable-do-better-like": {
+      "type": "bool",
+      "name": "Do Better Like",
+      "description": "Far right of the pause menu. A like button that takes you to the Do Better level.",
+      "default": true
+    },
+    "enable-mirror-portal": {
+      "type": "bool",
+      "name": "Reverse Mirror Portal",
+      "description": "Main menu, above the daily chests. Pops up a \"hello\" box at the bottom.",
+      "default": true
+    },
+    "enable-death": {
+      "type": "bool",
+      "name": "Death",
+      "description": "Pause menu, above the practice mode button. Returns to the level and kills you.",
+      "default": true
+    },
+    "enable-r4ndoom": {
+      "type": "bool",
+      "name": "R4ndoom Button",
+      "description": "Far right of the pause menu. Opens the profile of r4ndoom.",
       "default": true
     }
   }
