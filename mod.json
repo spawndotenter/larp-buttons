@@ -8,7 +8,7 @@
   "id": "spawndotenter.larpbuttons",
   "name": "Larp Buttons",
   "developer": "spawndotenter",
-  "description": "Adds a bunch of useless buttons to most menus. Every one can be switched off.",
+  "description": "Adds a bunch of useless buttons to various menus. Every one can be switched off.",
   "links": {
     "homepage": "https://github.com/spawndotenter/larp-buttons",
     "source": "https://github.com/spawndotenter/larp-buttons",
@@ -17,7 +17,8 @@
   "resources": {
     "sprites": [
       "ball.png",
-      "cube_459.png"
+      "cube_459.png",
+      "dice.png"
     ],
     "files": [
       "Kerplunck.mp3"
@@ -86,6 +87,18 @@
       "type": "bool",
       "name": "R4ndoom Button",
       "description": "Far right of the pause menu. Opens the profile of r4ndoom.",
+      "default": true
+    },
+    "enable-dice": {
+      "type": "bool",
+      "name": "Volume Dice",
+      "description": "Pause menu, under the music slider. The dice randomizes the music volume; \"Both?\" randomizes music and SFX.",
+      "default": true
+    },
+    "enable-easy-face": {
+      "type": "bool",
+      "name": "Easy Face Button",
+      "description": "Main menu, bottom row. A button with the easy face that does nothing.",
       "default": true
     }
   }
