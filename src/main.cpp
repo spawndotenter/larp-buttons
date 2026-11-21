@@ -15,6 +15,37 @@ static constexpr int R4NDOOM_ACCOUNT_ID = 25362634;
 static int g_killCountdown = 0;
 static int g_killRetry = 0;
 
+// The game pauses sound effects while the pause menu is open, so a normal
+// playEffect only plays once you unpause. Resume effects right after so it plays now.
+static void playEffectNow(char const* path) {
+    auto engine = FMODAudioEngine::sharedEngine();
+    engine->playEffect(path, 1.f, 1.f, 1.f);
+    engine->resumeAllEffects();
+}
+
+// Opens the Do Better level page a moment after leaving a level
+// (the exit transition would otherwise cancel it).
+class DoBetterOpener : public CCObject {
+public:
+    void fire(float) {
+        CCDirector::get()->getScheduler()->unscheduleSelector(
+            schedule_selector(DoBetterOpener::fire), this
+        );
+        auto level = GJGameLevel::create();
+        level->m_levelID = DO_BETTER_LEVEL_ID;
+        auto scene = LevelInfoLayer::scene(level, false);
+        CCDirector::get()->pushScene(CCTransitionFade::create(0.5f, scene));
+        this->release();
+    }
+
+    static void openAfter(float delay) {
+        auto opener = new DoBetterOpener();
+        CCDirector::get()->getScheduler()->scheduleSelector(
+            schedule_selector(DoBetterOpener::fire), opener, 0.f, 0, delay, false
+        );
+    }
+};
+
 // Uses the first game sprite that exists, otherwise shows text instead.
 static CCNode* frameIcon(std::initializer_list<char const*> names, char const* fallbackText) {
     auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
@@ -203,6 +234,8 @@ class $modify(LarpPause, PauseLayer) {
         CCNode* m_refreshIcon = nullptr;
         CCNode* m_spinner = nullptr;
         bool m_refreshing = false;
+        Ref<CCNode> m_resumeRef = nullptr;
+        CCNode* m_pauseCenterBtn = nullptr;
     };
 
     void customSetup() {
@@ -304,6 +337,13 @@ class $modify(LarpPause, PauseLayer) {
             btn->setID("pause-center-button"_spr);
             btn->setPosition(pos);
             menu->addChild(btn);
+
+            // Keep it lined up with the continue button even if the layout shifts later.
+            if (ref) {
+                m_fields->m_resumeRef = ref;
+                m_fields->m_pauseCenterBtn = btn;
+                this->schedule(schedule_selector(LarpPause::alignPauseCenter));
+            }
         }
 
         // Do better Like, far right (above the checkbox)
@@ -381,8 +421,20 @@ class $modify(LarpPause, PauseLayer) {
         }
     }
 
+    void alignPauseCenter(float) {
+        auto ref = m_fields->m_resumeRef.data();
+        auto btn = m_fields->m_pauseCenterBtn;
+        if (!ref || !btn || !ref->getParent()) return;
+        float h = ref->getScaledContentWidth() / 4.f;
+        auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
+        auto local = this->convertToNodeSpace(world);
+        btn->setPosition(ccp(
+            local.x, local.y - ref->getScaledContentHeight() / 2.f - h / 2.f - 2.f
+        ));
+    }
+
     void onPulse(CCObject*) {
-        FMODAudioEngine::sharedEngine()->playEffect("chestOpen01.ogg", 1.f, 1.f, 1.f);
+        playEffectNow("chestOpen01.ogg");
         bool on = !Mod::get()->getSavedValue<bool>("reverse-pulse", false);
         Mod::get()->setSavedValue("reverse-pulse", on);
         Notification::create(
@@ -430,7 +482,7 @@ class $modify(LarpPause, PauseLayer) {
     }
 
     void onVault(CCObject*) {
-        FMODAudioEngine::sharedEngine()->playEffect("Kerplunck.mp3"_spr, 1.f, 1.f, 1.f);
+        playEffectNow("Kerplunck.mp3"_spr);
         FLAlertLayer::create("Locked", "key required!", "OK")->show();
     }
 
@@ -443,13 +495,10 @@ class $modify(LarpPause, PauseLayer) {
     }
 
     void onDoBetterLike(CCObject*) {
-        // Leave the level first so you never come back to a half-paused game.
+        // Leave the level first so you never come back to a half-paused game,
+        // then open the Do Better page once the exit transition is done.
+        DoBetterOpener::openAfter(0.9f);
         this->onQuit(nullptr);
-
-        auto level = GJGameLevel::create();
-        level->m_levelID = DO_BETTER_LEVEL_ID;
-        auto scene = LevelInfoLayer::scene(level, false);
-        CCDirector::get()->pushScene(CCTransitionFade::create(0.5f, scene));
     }
 
     void onR4ndoom(CCObject*) {
