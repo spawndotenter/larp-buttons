@@ -4,7 +4,7 @@
     "android": "2.2081",
     "win": "2.2081"
   },
-  "version": "v1.1.1",
+  "version": "v1.2.0",
   "id": "spawndotenter.larpbuttons",
   "name": "Larp Buttons",
   "developer": "spawndotenter",
@@ -117,6 +117,12 @@
       "type": "bool",
       "name": "Empty Button",
       "description": "Level page, far left. A blank button that does nothing.",
+      "default": true
+    },
+    "enable-rate-level": {
+      "type": "bool",
+      "name": "Rate Level Button",
+      "description": "Level page, beneath the play button. Shows \"Rated!\" when clicked.",
       "default": true
     }
   }
