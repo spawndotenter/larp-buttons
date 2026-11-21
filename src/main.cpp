@@ -275,8 +275,16 @@ class $modify(LarpMenu, MenuLayer) {
 // Level page: "2.3" checkbox and an empty button, far left
 // ---------------------------------------------------------------------------
 class $modify(LarpInfo, LevelInfoLayer) {
+    struct Fields {
+        Ref<CCNode> m_playRef = nullptr;
+        CCNode* m_rateBtn = nullptr;
+        CCNode* m_ratedLabel = nullptr;
+    };
+
     bool init(GJGameLevel* level, bool challenge) {
         if (!LevelInfoLayer::init(level, challenge)) return false;
+
+        this->addRateButton();
 
         auto mod = Mod::get();
         bool wantCheckbox = mod->getSettingValue<bool>("enable-2-3-checkbox");
@@ -329,6 +337,75 @@ class $modify(LarpInfo, LevelInfoLayer) {
         }
 
         return true;
+    }
+
+    void addRateButton() {
+        if (!Mod::get()->getSettingValue<bool>("enable-rate-level")) return;
+        auto win = CCDirector::get()->getWinSize();
+
+        auto menu = CCMenu::create();
+        menu->setPosition({0.f, 0.f});
+        menu->setID("rate-level-menu"_spr);
+        this->addChild(menu, 100);
+
+        auto spr = ButtonSprite::create(
+            "rate level", 90, true, "bigFont.fnt", "GJ_button_01.png", 24.f, 0.45f
+        );
+        auto btn = CCMenuItemSpriteExtra::create(
+            spr, this, menu_selector(LarpInfo::onRateLevel)
+        );
+        btn->setID("rate-level-button"_spr);
+        btn->setPosition({win.width / 2.f, 60.f});
+        menu->addChild(btn);
+        m_fields->m_rateBtn = btn;
+
+        // Sit just beneath the play button, and stay there if the layout shifts
+        if (auto ref = this->getChildByIDRecursive("play-button")) {
+            m_fields->m_playRef = ref;
+            this->schedule(schedule_selector(LarpInfo::alignRate));
+            this->alignRate(0.f);
+        }
+    }
+
+    void alignRate(float) {
+        auto ref = m_fields->m_playRef.data();
+        auto btn = m_fields->m_rateBtn;
+        if (!ref || !btn || !ref->getParent()) return;
+
+        auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
+        auto local = this->convertToNodeSpace(world);
+        btn->setPosition(ccp(local.x, local.y - ref->getScaledContentHeight() / 2.f - 14.f));
+
+        if (m_fields->m_ratedLabel) {
+            m_fields->m_ratedLabel->setPosition(ccp(local.x, btn->getPositionY() - 24.f));
+        }
+    }
+
+    void onRateLevel(CCObject*) {
+        if (m_fields->m_ratedLabel) {
+            this->unschedule(schedule_selector(LarpInfo::onHideRated));
+            m_fields->m_ratedLabel->removeFromParent();
+            m_fields->m_ratedLabel = nullptr;
+        }
+
+        auto label = CCLabelBMFont::create("Rated!", "bigFont.fnt");
+        label->setScale(0.6f);
+        if (m_fields->m_rateBtn) {
+            label->setPosition(ccp(
+                m_fields->m_rateBtn->getPositionX(), m_fields->m_rateBtn->getPositionY() - 24.f
+            ));
+        }
+        this->addChild(label, 200);
+        m_fields->m_ratedLabel = label;
+
+        this->scheduleOnce(schedule_selector(LarpInfo::onHideRated), 2.f);
+    }
+
+    void onHideRated(float) {
+        if (m_fields->m_ratedLabel) {
+            m_fields->m_ratedLabel->removeFromParent();
+            m_fields->m_ratedLabel = nullptr;
+        }
     }
 
     void onTwoThree(CCObject*) {
