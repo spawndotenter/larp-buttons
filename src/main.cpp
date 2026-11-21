@@ -55,13 +55,13 @@ class $modify(LarpPause, PauseLayer) {
             if (!ref) ref = this->getChildByIDRecursive("play-button");
 
             float width = 80.f;
-            CCPoint pos = {win.width / 2.f, win.height / 2.f - 80.f};
+            CCPoint pos = ccp(win.width / 2.f, win.height / 2.f - 80.f);
             if (ref) {
                 width = ref->getScaledContentWidth();
                 auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
                 auto local = this->convertToNodeSpace(world);
                 float h = width / 4.f;
-                pos = {local.x, local.y - ref->getScaledContentHeight() / 2.f - h / 2.f - 10.f};
+                pos = ccp(local.x, local.y - ref->getScaledContentHeight() / 2.f - h / 2.f - 10.f);
             }
 
             auto spr = ButtonSprite::create(
