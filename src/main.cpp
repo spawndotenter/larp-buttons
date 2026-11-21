@@ -7,6 +7,7 @@
 
 #include <random>
 #include <functional>
+#include <filesystem>
 
 using namespace geode::prelude;
 
@@ -36,25 +37,49 @@ static void playEffectNow(char const* path) {
     engine->resumeAllEffects();
 }
 
-// Runs something a moment later, independent of any scene. Used to open a page
-// right after leaving a level (the exit transition would otherwise cancel it).
+// Plays a sound that ships inside the mod (listed under "files" in mod.json).
+// Tries the real file path first, then the "mod id/name" form.
+static void playModSound(std::string const& name) {
+    std::error_code ec;
+    auto path = Mod::get()->getResourcesDir() / name;
+    if (std::filesystem::exists(path, ec)) {
+        auto full = path.string();
+        playEffectNow(full.c_str());
+    } else {
+        auto prefixed = Mod::get()->getID() + "/" + name;
+        playEffectNow(prefixed.c_str());
+    }
+}
+
+// Runs something right after leaving a level, independent of any scene.
+// It waits at least a couple of frames, and until the game's own exit fade has
+// finished (opening a page during the fade would get cancelled by it).
 class DelayedAction : public CCObject {
     std::function<void()> m_action;
+    int m_frames = 0;
+    int m_minFrames = 2;
 
 public:
-    void fire(float) {
+    void tick(float) {
+        m_frames++;
+        if (m_frames < m_minFrames) return;
+
+        auto scene = CCDirector::get()->getRunningScene();
+        bool fading = scene && typeinfo_cast<CCTransitionScene*>(scene);
+        if (fading && m_frames < 240) return;
+
         CCDirector::get()->getScheduler()->unscheduleSelector(
-            schedule_selector(DelayedAction::fire), this
+            schedule_selector(DelayedAction::tick), this
         );
         if (m_action) m_action();
         this->release();
     }
 
-    static void runAfter(float delay, std::function<void()> action) {
+    static void runSoon(std::function<void()> action) {
         auto obj = new DelayedAction();
         obj->m_action = std::move(action);
         CCDirector::get()->getScheduler()->scheduleSelector(
-            schedule_selector(DelayedAction::fire), obj, 0.f, 0, delay, false
+            schedule_selector(DelayedAction::tick), obj, 0.f, kCCRepeatForever, 0.f, false
         );
     }
 };
@@ -72,6 +97,54 @@ static CCNode* frameIcon(std::initializer_list<char const*> names, char const* f
     auto label = CCLabelBMFont::create(fallbackText, "bigFont.fnt");
     label->setScale(0.45f);
     return label;
+}
+
+static std::vector<CCPoint> circlePoints(float r) {
+    std::vector<CCPoint> pts;
+    for (int i = 0; i < 28; i++) {
+        float a = static_cast<float>(i) / 28.f * 6.2831853f;
+        pts.push_back(ccp(std::cos(a) * r, std::sin(a) * r));
+    }
+    return pts;
+}
+
+// Black orb with a red X at the top right (and a hidden green check in the same spot)
+static CCNode* makeBlackOrbIcon(CCNode** xOut, CCNode** checkOut) {
+    auto holder = CCNode::create();
+    holder->setContentSize({44.f, 44.f});
+
+    auto orb = CCDrawNode::create();
+    auto outer = circlePoints(15.f);
+    orb->drawPolygon(
+        outer.data(), static_cast<unsigned int>(outer.size()),
+        ccc4f(0.f, 0.f, 0.f, 1.f), 2.f, ccc4f(0.78f, 0.78f, 0.78f, 1.f)
+    );
+    auto inner = circlePoints(8.f);
+    orb->drawPolygon(
+        inner.data(), static_cast<unsigned int>(inner.size()),
+        ccc4f(0.1f, 0.1f, 0.1f, 1.f), 1.f, ccc4f(0.45f, 0.45f, 0.45f, 1.f)
+    );
+    orb->setPosition({20.f, 20.f});
+    holder->addChild(orb);
+
+    auto red = ccc4f(1.f, 0.2f, 0.2f, 1.f);
+    auto xMark = CCDrawNode::create();
+    xMark->drawSegment(ccp(-5.f, -5.f), ccp(5.f, 5.f), 1.8f, red);
+    xMark->drawSegment(ccp(-5.f, 5.f), ccp(5.f, -5.f), 1.8f, red);
+    xMark->setPosition({36.f, 36.f});
+    holder->addChild(xMark);
+
+    auto green = ccc4f(0.2f, 1.f, 0.2f, 1.f);
+    auto check = CCDrawNode::create();
+    check->drawSegment(ccp(-5.f, 0.f), ccp(-1.5f, -4.f), 1.8f, green);
+    check->drawSegment(ccp(-1.5f, -4.f), ccp(5.5f, 5.f), 1.8f, green);
+    check->setPosition({36.f, 36.f});
+    check->setVisible(false);
+    holder->addChild(check);
+
+    *xOut = xMark;
+    *checkOut = check;
+    return holder;
 }
 
 // Purple sideways mirror portal. Uses the game's portal sprite if it is loaded,
@@ -487,6 +560,9 @@ class $modify(LarpPause, PauseLayer) {
         Ref<CCNode> m_resumeRef = nullptr;
         CCNode* m_pauseCenterBtn = nullptr;
         CCNode* m_infoBtn = nullptr;
+        CCNode* m_orbX = nullptr;
+        CCNode* m_orbCheck = nullptr;
+        bool m_orbChecked = false;
     };
 
     void customSetup() {
@@ -545,6 +621,16 @@ class $modify(LarpPause, PauseLayer) {
                 "Vault"
             );
             addLeft(icon, menu_selector(LarpPause::onVault), "vault-button"_spr);
+        }
+
+        // Black orb with an X that toggles to a check
+        if (mod->getSettingValue<bool>("enable-black-orb")) {
+            CCNode* xMark = nullptr;
+            CCNode* checkMark = nullptr;
+            auto icon = makeBlackOrbIcon(&xMark, &checkMark);
+            m_fields->m_orbX = xMark;
+            m_fields->m_orbCheck = checkMark;
+            addLeft(icon, menu_selector(LarpPause::onBlackOrb), "black-orb-button"_spr);
         }
 
         // ZucchiniV2 checkbox, far right (does nothing)
@@ -843,8 +929,15 @@ class $modify(LarpPause, PauseLayer) {
     }
 
     void onVault(CCObject*) {
-        playEffectNow("Kerplunck.mp3"_spr);
+        playModSound("Kerplunck.mp3");
         FLAlertLayer::create("Locked", "key required!", "OK")->show();
+    }
+
+    void onBlackOrb(CCObject*) {
+        bool on = !m_fields->m_orbChecked;
+        m_fields->m_orbChecked = on;
+        if (m_fields->m_orbX) m_fields->m_orbX->setVisible(!on);
+        if (m_fields->m_orbCheck) m_fields->m_orbCheck->setVisible(on);
     }
 
     void onZucchini(CCObject*) {
@@ -858,7 +951,7 @@ class $modify(LarpPause, PauseLayer) {
     void onDoBetterLike(CCObject*) {
         // Leave the level first so you never come back to a half-paused game,
         // then open the Do Better page once the exit transition is done.
-        DelayedAction::runAfter(0.9f, [] {
+        DelayedAction::runSoon([] {
             auto level = GJGameLevel::create();
             level->m_levelID = DO_BETTER_LEVEL_ID;
             auto scene = LevelInfoLayer::scene(level, false);
@@ -876,7 +969,7 @@ class $modify(LarpPause, PauseLayer) {
         }
         // Leave the level first. Playing a level from the profile and then going
         // back into the old level crashes the game.
-        DelayedAction::runAfter(0.9f, [] {
+        DelayedAction::runSoon([] {
             ProfilePage::create(R4NDOOM_ACCOUNT_ID, false)->show();
         });
         this->onQuit(nullptr);
