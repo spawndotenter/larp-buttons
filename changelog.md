@@ -1,3 +1,8 @@
+# v1.2.0
+* Added the Rate Level button
+* Added a 2.3 Checkbox
+* Added The Unpause Info button
+
 # v1.1.0
 * Added the dice button
 * Added a useless Easy face button
