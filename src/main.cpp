@@ -7,8 +7,8 @@ using namespace geode::prelude;
 static constexpr int DO_BETTER_LEVEL_ID = 152277985;
 
 // Put r4ndoom's GD account ID here (a number, not the username).
-// While it is 0, the r4ndoom button just shows a "not set" message.
-static constexpr int R4NDOOM_ACCOUNT_ID = 0;
+// (If this is ever set to 0, the button shows a "not set" message instead.)
+static constexpr int R4NDOOM_ACCOUNT_ID = 25362634;
 
 // Uses the first game sprite that exists, otherwise shows text instead.
 static CCNode* frameIcon(std::initializer_list<char const*> names, char const* fallbackText) {
