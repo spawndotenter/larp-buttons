@@ -3,12 +3,15 @@
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp>
+#include <Geode/modify/LevelSearchLayer.hpp>
 
 #include <random>
+#include <functional>
 
 using namespace geode::prelude;
 
 static constexpr int DO_BETTER_LEVEL_ID = 152277985;
+static constexpr int BUTTER_ACCOUNT_ID = 19696663;
 
 // Put r4ndoom's GD account ID here (a number, not the username).
 // (If this is ever set to 0, the button shows a "not set" message instead.)
@@ -33,25 +36,25 @@ static void playEffectNow(char const* path) {
     engine->resumeAllEffects();
 }
 
-// Opens the Do Better level page a moment after leaving a level
-// (the exit transition would otherwise cancel it).
-class DoBetterOpener : public CCObject {
+// Runs something a moment later, independent of any scene. Used to open a page
+// right after leaving a level (the exit transition would otherwise cancel it).
+class DelayedAction : public CCObject {
+    std::function<void()> m_action;
+
 public:
     void fire(float) {
         CCDirector::get()->getScheduler()->unscheduleSelector(
-            schedule_selector(DoBetterOpener::fire), this
+            schedule_selector(DelayedAction::fire), this
         );
-        auto level = GJGameLevel::create();
-        level->m_levelID = DO_BETTER_LEVEL_ID;
-        auto scene = LevelInfoLayer::scene(level, false);
-        CCDirector::get()->pushScene(CCTransitionFade::create(0.5f, scene));
+        if (m_action) m_action();
         this->release();
     }
 
-    static void openAfter(float delay) {
-        auto opener = new DoBetterOpener();
+    static void runAfter(float delay, std::function<void()> action) {
+        auto obj = new DelayedAction();
+        obj->m_action = std::move(action);
         CCDirector::get()->getScheduler()->scheduleSelector(
-            schedule_selector(DoBetterOpener::fire), opener, 0.f, 0, delay, false
+            schedule_selector(DelayedAction::fire), obj, 0.f, 0, delay, false
         );
     }
 };
@@ -414,6 +417,62 @@ class $modify(LarpInfo, LevelInfoLayer) {
 
     void onEmptyButton(CCObject*) {
         // does nothing, on purpose
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Search page: butter button to the right of the X
+// ---------------------------------------------------------------------------
+class $modify(LarpSearch, LevelSearchLayer) {
+    bool init(int searchType) {
+        if (!LevelSearchLayer::init(searchType)) return false;
+        if (!Mod::get()->getSettingValue<bool>("enable-butter")) return true;
+
+        auto win = CCDirector::get()->getWinSize();
+
+        CCNode* ref = this->getChildByIDRecursive("clear-search-button");
+        if (!ref) ref = this->getChildByIDRecursive("clear-button");
+
+        // The butter image is already a round button, so match the size of the X button
+        float targetHeight = (ref ? ref->getScaledContentHeight() : 40.f);
+
+        CCNode* icon = CCSprite::create("butter.png"_spr);
+        if (icon) {
+            icon->setScale(targetHeight / icon->getContentHeight());
+        } else {
+            auto label = CCLabelBMFont::create("Butter", "bigFont.fnt");
+            label->setScale(0.4f);
+            icon = label;
+        }
+
+        // Right next to the X, on its right side
+        CCPoint pos = ccp(win.width - 30.f, win.height - 40.f);
+        if (ref && ref->getParent()) {
+            auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
+            auto local = this->convertToNodeSpace(world);
+            pos = ccp(
+                local.x + ref->getScaledContentWidth() / 2.f + 6.f + icon->getScaledContentWidth() / 2.f,
+                local.y
+            );
+        }
+
+        auto menu = CCMenu::create();
+        menu->setPosition({0.f, 0.f});
+        menu->setID("butter-menu"_spr);
+        this->addChild(menu, 100);
+
+        auto btn = CCMenuItemSpriteExtra::create(
+            icon, this, menu_selector(LarpSearch::onButter)
+        );
+        btn->setID("butter-button"_spr);
+        btn->setPosition(pos);
+        menu->addChild(btn);
+
+        return true;
+    }
+
+    void onButter(CCObject*) {
+        ProfilePage::create(BUTTER_ACCOUNT_ID, false)->show();
     }
 };
 
@@ -799,7 +858,12 @@ class $modify(LarpPause, PauseLayer) {
     void onDoBetterLike(CCObject*) {
         // Leave the level first so you never come back to a half-paused game,
         // then open the Do Better page once the exit transition is done.
-        DoBetterOpener::openAfter(0.9f);
+        DelayedAction::runAfter(0.9f, [] {
+            auto level = GJGameLevel::create();
+            level->m_levelID = DO_BETTER_LEVEL_ID;
+            auto scene = LevelInfoLayer::scene(level, false);
+            CCDirector::get()->pushScene(CCTransitionFade::create(0.5f, scene));
+        });
         this->onQuit(nullptr);
     }
 
@@ -810,7 +874,12 @@ class $modify(LarpPause, PauseLayer) {
             )->show();
             return;
         }
-        ProfilePage::create(R4NDOOM_ACCOUNT_ID, false)->show();
+        // Leave the level first. Playing a level from the profile and then going
+        // back into the old level crashes the game.
+        DelayedAction::runAfter(0.9f, [] {
+            ProfilePage::create(R4NDOOM_ACCOUNT_ID, false)->show();
+        });
+        this->onQuit(nullptr);
     }
 
     void onDeath(CCObject*) {
