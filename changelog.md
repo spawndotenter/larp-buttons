@@ -1,3 +1,7 @@
+# v1.2.1
+* Added the Butter button
+* Fixed a game crash related to the r4ndoom button.
+
 # v1.2.0
 * Added the Rate Level button
 * Added a 2.3 Checkbox
