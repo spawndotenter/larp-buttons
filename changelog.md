@@ -1,3 +1,6 @@
+# v1.2.2
+*  Added the black orb button
+
 # v1.2.1
 * Added the Butter button
 * Fixed a game crash related to the r4ndoom button.
