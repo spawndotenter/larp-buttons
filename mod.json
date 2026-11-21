@@ -4,7 +4,7 @@
     "android": "2.2081",
     "win": "2.2081"
   },
-  "version": "v1.2.1",
+  "version": "v1.2.2",
   "id": "spawndotenter.larpbuttons",
   "name": "Larp Buttons",
   "developer": "spawndotenter",
@@ -130,6 +130,12 @@
       "type": "bool",
       "name": "Butter Button",
       "description": "Search page, next to the X. Opens a profile.",
+      "default": true
+    },
+    "enable-black-orb": {
+      "type": "bool",
+      "name": "Black Orb",
+      "description": "Far left of the pause menu. A black orb with an X that toggles to a check.",
       "default": true
     }
   }
