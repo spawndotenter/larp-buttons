@@ -1,0 +1,41 @@
+{
+  "geode": "5.11.2",
+  "gd": {
+    "android": "2.2081",
+    "win": "2.2081"
+  },
+  "version": "v1.0.0",
+  "id": "spawndotenter.larpbuttons",
+  "name": "Larp Buttons",
+  "developer": "spawndotenter",
+  "description": "Adds a bunch of useless buttons to the pause menu. Every one can be switched off.",
+  "links": {
+    "homepage": "https://github.com/spawndotenter/larp-buttons",
+    "source": "https://github.com/spawndotenter/larp-buttons",
+    "community": "https://discord.gg/fyFJvbEnVF"
+  },
+  "settings": {
+    "title-buttons": {
+      "type": "title",
+      "name": "Pause Menu Buttons"
+    },
+    "enable-pulse": {
+      "type": "bool",
+      "name": "Upside-Down Pulse Trigger",
+      "description": "Far left of the pause menu. Toggles \"reverse pulse mode\" and plays the chest sound.",
+      "default": true
+    },
+    "enable-zucchini": {
+      "type": "bool",
+      "name": "ZucchiniV2 Checkbox",
+      "description": "Far right of the pause menu. A checkbox that does nothing.",
+      "default": true
+    },
+    "enable-pause-center": {
+      "type": "bool",
+      "name": "Pause Center Button",
+      "description": "Below the continue button. Clicking it exits the level.",
+      "default": true
+    }
+  }
+}
