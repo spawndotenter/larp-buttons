@@ -2,6 +2,7 @@
 * Added the Rate Level button
 * Added a 2.3 Checkbox
 * Added The Unpause Info button
+* Added an empty button
 
 # v1.1.0
 * Added the dice button
