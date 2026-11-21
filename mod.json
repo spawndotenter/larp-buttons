@@ -4,11 +4,11 @@
     "android": "2.2081",
     "win": "2.2081"
   },
-  "version": "v1.1.0",
+  "version": "v1.0.0",
   "id": "spawndotenter.larpbuttons",
   "name": "Larp Buttons",
   "developer": "spawndotenter",
-  "description": "Adds a bunch of useless buttons to various menus. Every one can be switched off.",
+  "description": "Adds a bunch of useless buttons to the pause menu. Every one can be switched off.",
   "links": {
     "homepage": "https://github.com/spawndotenter/larp-buttons",
     "source": "https://github.com/spawndotenter/larp-buttons",
@@ -99,6 +99,24 @@
       "type": "bool",
       "name": "Easy Face Button",
       "description": "Main menu, bottom row. A button with the easy face that does nothing.",
+      "default": true
+    },
+    "enable-continue-info": {
+      "type": "bool",
+      "name": "Continue Info Button",
+      "description": "Pause menu, top right of the continue button. Opens a popup about the button.",
+      "default": true
+    },
+    "enable-2-3-checkbox": {
+      "type": "bool",
+      "name": "2.3 Checkbox",
+      "description": "Level page, far left. A checkbox that does nothing.",
+      "default": true
+    },
+    "enable-empty-button": {
+      "type": "bool",
+      "name": "Empty Button",
+      "description": "Level page, far left. A blank button that does nothing.",
       "default": true
     }
   }
