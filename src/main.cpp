@@ -201,4 +201,16 @@ class $modify(LarpPause, PauseLayer) {
         m_fields->m_refreshing = false;
     }
 
-    void onVault(CC
+    void onVault(CCObject*) {
+        FMODAudioEngine::sharedEngine()->playEffect("Kerplunck.mp3"_spr, 1.f, 1.f, 1.f);
+        FLAlertLayer::create("Locked", "key required!", "OK")->show();
+    }
+
+    void onZucchini(CCObject*) {
+        // does nothing, on purpose
+    }
+
+    void onPauseCenter(CCObject*) {
+        this->onQuit(nullptr);
+    }
+};
