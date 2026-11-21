@@ -2,6 +2,7 @@
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/LevelInfoLayer.hpp>
 
 #include <random>
 
@@ -271,6 +272,75 @@ class $modify(LarpMenu, MenuLayer) {
 };
 
 // ---------------------------------------------------------------------------
+// Level page: "2.3" checkbox and an empty button, far left
+// ---------------------------------------------------------------------------
+class $modify(LarpInfo, LevelInfoLayer) {
+    bool init(GJGameLevel* level, bool challenge) {
+        if (!LevelInfoLayer::init(level, challenge)) return false;
+
+        auto mod = Mod::get();
+        bool wantCheckbox = mod->getSettingValue<bool>("enable-2-3-checkbox");
+        bool wantEmpty = mod->getSettingValue<bool>("enable-empty-button");
+        if (!wantCheckbox && !wantEmpty) return true;
+
+        CCMenuItemToggler* box = nullptr;
+        if (wantCheckbox) {
+            box = CCMenuItemToggler::createWithStandardSprites(
+                this, menu_selector(LarpInfo::onTwoThree), 0.7f
+            );
+            box->setID("two-three-checkbox"_spr);
+
+            auto label = CCLabelBMFont::create("2.3", "bigFont.fnt");
+            label->setScale(0.45f);
+            label->setAnchorPoint({0.f, 0.5f});
+            label->setPosition({box->getContentSize().width + 4.f, box->getContentSize().height / 2.f});
+            box->addChild(label);
+        }
+
+        CCMenuItemSpriteExtra* empty = nullptr;
+        if (wantEmpty) {
+            auto spr = ButtonSprite::create(
+                "", 36, true, "bigFont.fnt", "GJ_button_01.png", 30.f, 0.8f
+            );
+            empty = CCMenuItemSpriteExtra::create(
+                spr, this, menu_selector(LarpInfo::onEmptyButton)
+            );
+            empty->setID("empty-button"_spr);
+        }
+
+        // Join the existing far-left column so we line up with other buttons/mods
+        auto side = typeinfo_cast<CCMenu*>(this->getChildByID("left-side-menu"));
+        if (side && side->getLayout()) {
+            if (box) side->addChild(box);
+            if (empty) side->addChild(empty);
+            side->updateLayout();
+        } else {
+            auto menu = CCMenu::create();
+            menu->setPosition({0.f, 0.f});
+            this->addChild(menu, 100);
+            if (box) {
+                box->setPosition({24.f, 70.f});
+                menu->addChild(box);
+            }
+            if (empty) {
+                empty->setPosition({24.f, 30.f});
+                menu->addChild(empty);
+            }
+        }
+
+        return true;
+    }
+
+    void onTwoThree(CCObject*) {
+        // does nothing, on purpose
+    }
+
+    void onEmptyButton(CCObject*) {
+        // does nothing, on purpose
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Pause menu buttons
 // ---------------------------------------------------------------------------
 class $modify(LarpPause, PauseLayer) {
@@ -280,6 +350,7 @@ class $modify(LarpPause, PauseLayer) {
         bool m_refreshing = false;
         Ref<CCNode> m_resumeRef = nullptr;
         CCNode* m_pauseCenterBtn = nullptr;
+        CCNode* m_infoBtn = nullptr;
     };
 
     void customSetup() {
@@ -382,12 +453,44 @@ class $modify(LarpPause, PauseLayer) {
             btn->setPosition(pos);
             menu->addChild(btn);
 
-            // Keep it lined up with the continue button even if the layout shifts later.
             if (ref) {
                 m_fields->m_resumeRef = ref;
                 m_fields->m_pauseCenterBtn = btn;
-                this->schedule(schedule_selector(LarpPause::alignPauseCenter));
             }
+        }
+
+        // Info button, top right of the continue button
+        if (mod->getSettingValue<bool>("enable-continue-info")) {
+            CCNode* ref = this->getChildByIDRecursive("resume-button");
+            if (!ref) ref = this->getChildByIDRecursive("play-button");
+
+            CCNode* icon = nullptr;
+            auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+            if (cache->spriteFrameByName("GJ_infoIcon_001.png")) {
+                icon = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
+                icon->setScale(26.f / icon->getContentHeight());
+            } else {
+                auto label = CCLabelBMFont::create("i", "bigFont.fnt");
+                label->setScale(0.6f);
+                icon = label;
+            }
+
+            auto btn = CCMenuItemSpriteExtra::create(
+                icon, this, menu_selector(LarpPause::onContinueInfo)
+            );
+            btn->setID("continue-info-button"_spr);
+            btn->setPosition({win.width / 2.f + 45.f, win.height / 2.f + 25.f});
+            menu->addChild(btn);
+
+            m_fields->m_infoBtn = btn;
+            if (ref && !m_fields->m_resumeRef.data()) m_fields->m_resumeRef = ref;
+        }
+
+        // Keep the pause center box and the info button lined up with the
+        // continue button even if the layout shifts later.
+        if (m_fields->m_resumeRef.data() && (m_fields->m_pauseCenterBtn || m_fields->m_infoBtn)) {
+            this->schedule(schedule_selector(LarpPause::alignPauseCenter));
+            this->alignPauseCenter(0.f);
         }
 
         // Do better Like, far right (above the checkbox)
@@ -535,14 +638,24 @@ class $modify(LarpPause, PauseLayer) {
 
     void alignPauseCenter(float) {
         auto ref = m_fields->m_resumeRef.data();
-        auto btn = m_fields->m_pauseCenterBtn;
-        if (!ref || !btn || !ref->getParent()) return;
-        float h = ref->getScaledContentWidth() / 4.f;
+        if (!ref || !ref->getParent()) return;
+
         auto world = ref->getParent()->convertToWorldSpace(ref->getPosition());
         auto local = this->convertToNodeSpace(world);
-        btn->setPosition(ccp(
-            local.x, local.y - ref->getScaledContentHeight() / 2.f - h / 2.f - 2.f
-        ));
+        float w = ref->getScaledContentWidth();
+        float ht = ref->getScaledContentHeight();
+
+        if (auto btn = m_fields->m_pauseCenterBtn) {
+            float h = w / 4.f;
+            btn->setPosition(ccp(local.x, local.y - ht / 2.f - h / 2.f - 2.f));
+        }
+        if (auto info = m_fields->m_infoBtn) {
+            info->setPosition(ccp(local.x + w * 0.38f, local.y + ht * 0.38f));
+        }
+    }
+
+    void onContinueInfo(CCObject*) {
+        FLAlertLayer::create("Unpause button", "Unpauses the level.", "OK")->show();
     }
 
     void onPulse(CCObject*) {
