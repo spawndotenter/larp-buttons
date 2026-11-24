@@ -1,5 +1,11 @@
+# v1.3.0
+* Updated for 2.2091
+* Fixed the black orb sprite
+* Fixed layering
+* fixed a sound effect not playing
+
 # v1.2.2
-*  Added the black orb button
+* Added the black orb button
 
 # v1.2.1
 * Added the Butter button
