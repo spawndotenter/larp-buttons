@@ -133,36 +133,66 @@ static std::vector<CCPoint> circlePoints(float r) {
     return pts;
 }
 
-// Black orb with a red X at the top right (and a hidden green check in the same spot)
+// Returns the first game sprite frame that exists, or nullptr.
+static CCSprite* firstFrame(std::initializer_list<char const*> names) {
+    auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+    for (auto name : names) {
+        if (cache->spriteFrameByName(name)) {
+            return CCSprite::createWithSpriteFrameName(name);
+        }
+    }
+    return nullptr;
+}
+
+// Black orb with a red X at the top right (and a hidden green check in the same spot).
+// Uses the game's own sprites; falls back to drawn shapes if a sprite isn't found.
 static CCNode* makeBlackOrbIcon(CCNode** xOut, CCNode** checkOut) {
     auto holder = CCNode::create();
     holder->setContentSize({44.f, 44.f});
 
-    auto orb = CCDrawNode::create();
-    auto outer = circlePoints(15.f);
-    orb->drawPolygon(
-        outer.data(), static_cast<unsigned int>(outer.size()),
-        ccc4f(0.f, 0.f, 0.f, 1.f), 2.f, ccc4f(0.78f, 0.78f, 0.78f, 1.f)
-    );
-    auto inner = circlePoints(8.f);
-    orb->drawPolygon(
-        inner.data(), static_cast<unsigned int>(inner.size()),
-        ccc4f(0.1f, 0.1f, 0.1f, 1.f), 1.f, ccc4f(0.45f, 0.45f, 0.45f, 1.f)
-    );
-    orb->setPosition({20.f, 20.f});
-    holder->addChild(orb);
+    if (auto orbSpr = firstFrame({"ring_05_001.png"})) {
+        orbSpr->setScale(32.f / orbSpr->getContentHeight());
+        orbSpr->setPosition({20.f, 20.f});
+        holder->addChild(orbSpr);
+    } else {
+        auto orb = CCDrawNode::create();
+        auto outer = circlePoints(15.f);
+        orb->drawPolygon(
+            outer.data(), static_cast<unsigned int>(outer.size()),
+            ccc4f(0.f, 0.f, 0.f, 1.f), 2.f, ccc4f(0.78f, 0.78f, 0.78f, 1.f)
+        );
+        auto inner = circlePoints(8.f);
+        orb->drawPolygon(
+            inner.data(), static_cast<unsigned int>(inner.size()),
+            ccc4f(0.1f, 0.1f, 0.1f, 1.f), 1.f, ccc4f(0.45f, 0.45f, 0.45f, 1.f)
+        );
+        orb->setPosition({20.f, 20.f});
+        holder->addChild(orb);
+    }
 
-    auto red = ccc4f(1.f, 0.2f, 0.2f, 1.f);
-    auto xMark = CCDrawNode::create();
-    xMark->drawSegment(ccp(-5.f, -5.f), ccp(5.f, 5.f), 1.8f, red);
-    xMark->drawSegment(ccp(-5.f, 5.f), ccp(5.f, -5.f), 1.8f, red);
+    CCNode* xMark = firstFrame({"GJ_deleteIcon_001.png"});
+    if (xMark) {
+        xMark->setScale(18.f / xMark->getContentHeight());
+    } else {
+        auto red = ccc4f(1.f, 0.2f, 0.2f, 1.f);
+        auto draw = CCDrawNode::create();
+        draw->drawSegment(ccp(-5.f, -5.f), ccp(5.f, 5.f), 1.8f, red);
+        draw->drawSegment(ccp(-5.f, 5.f), ccp(5.f, -5.f), 1.8f, red);
+        xMark = draw;
+    }
     xMark->setPosition({36.f, 36.f});
     holder->addChild(xMark);
 
-    auto green = ccc4f(0.2f, 1.f, 0.2f, 1.f);
-    auto check = CCDrawNode::create();
-    check->drawSegment(ccp(-5.f, 0.f), ccp(-1.5f, -4.f), 1.8f, green);
-    check->drawSegment(ccp(-1.5f, -4.f), ccp(5.5f, 5.f), 1.8f, green);
+    CCNode* check = firstFrame({"GJ_completesIcon_001.png", "GJ_checkOn_001.png"});
+    if (check) {
+        check->setScale(18.f / check->getContentHeight());
+    } else {
+        auto green = ccc4f(0.2f, 1.f, 0.2f, 1.f);
+        auto draw = CCDrawNode::create();
+        draw->drawSegment(ccp(-5.f, 0.f), ccp(-1.5f, -4.f), 1.8f, green);
+        draw->drawSegment(ccp(-1.5f, -4.f), ccp(5.5f, 5.f), 1.8f, green);
+        check = draw;
+    }
     check->setPosition({36.f, 36.f});
     check->setVisible(false);
     holder->addChild(check);
@@ -601,14 +631,22 @@ class $modify(LarpPause, PauseLayer) {
         menu->setID("larp-buttons-menu"_spr);
         this->addChild(menu, 100);
 
-        // Left column, top to bottom
+        // Left column. Join the pause menu's own left column (the one other mods
+        // use) so our buttons line up with theirs instead of overlapping them.
+        auto side = typeinfo_cast<CCMenu*>(this->getChildByID("left-button-menu"));
+        bool useSide = side && side->getLayout();
+
         float y = win.height / 2.f + 75.f;
         auto addLeft = [&](CCNode* icon, SEL_MenuHandler cb, std::string const& id) {
             auto btn = CCMenuItemSpriteExtra::create(icon, this, cb);
             btn->setID(id);
-            btn->setPosition({28.f, y});
-            menu->addChild(btn);
-            y -= 45.f;
+            if (useSide) {
+                side->addChild(btn);
+            } else {
+                btn->setPosition({28.f, y});
+                menu->addChild(btn);
+                y -= 45.f;
+            }
             return btn;
         };
 
@@ -657,6 +695,8 @@ class $modify(LarpPause, PauseLayer) {
             m_fields->m_orbCheck = checkMark;
             addLeft(icon, menu_selector(LarpPause::onBlackOrb), "black-orb-button"_spr);
         }
+
+        if (useSide) side->updateLayout();
 
         // ZucchiniV2 checkbox, far right (does nothing)
         if (mod->getSettingValue<bool>("enable-zucchini")) {
