@@ -5,9 +5,15 @@
 #include <Geode/modify/LevelInfoLayer.hpp>
 #include <Geode/modify/LevelSearchLayer.hpp>
 
-#include <random>
-#include <functional>
+#include <asp/fs/std.hpp> // lets us keep using std::filesystem via toStdPath()
+
+#include <cmath>
 #include <filesystem>
+#include <functional>
+#include <initializer_list>
+#include <random>
+#include <string>
+#include <vector>
 
 using namespace geode::prelude;
 
@@ -41,7 +47,8 @@ static void playEffectNow(char const* path) {
 // Tries the real file path first, then the "mod id/name" form.
 static void playModSound(std::string const& name) {
     std::error_code ec;
-    auto path = Mod::get()->getResourcesDir() / name;
+    // Geode v6: getResourcesDir() returns asp::fs::Path, convert for std::filesystem
+    auto path = Mod::get()->getResourcesDir().toStdPath() / name;
     if (std::filesystem::exists(path, ec)) {
         auto full = path.string();
         playEffectNow(full.c_str());
