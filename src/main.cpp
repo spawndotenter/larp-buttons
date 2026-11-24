@@ -37,19 +37,37 @@ static int g_killRetry = 0;
 
 // The game pauses sound effects while the pause menu is open, so a normal
 // playEffect only plays once you unpause. Resume effects right after so it plays now.
+// resumeAllEffects() is gone from the 2.2091 bindings, so try the likely names
+// and skip quietly if none exist (the sound then plays once you unpause).
+template <class Engine>
+static void resumeEffectsCompat(Engine* engine) {
+    if constexpr (requires { engine->resumeAllEffects(); }) {
+        engine->resumeAllEffects();
+    } else if constexpr (requires { engine->resumeAllAudio(); }) {
+        engine->resumeAllAudio();
+    } else if constexpr (requires { engine->resumeAllMusic(); }) {
+        engine->resumeAllMusic();
+    }
+}
+
 static void playEffectNow(char const* path) {
     auto engine = FMODAudioEngine::sharedEngine();
     engine->playEffect(path, 1.f, 1.f, 1.f);
-    engine->resumeAllEffects();
+    resumeEffectsCompat(engine);
 }
 
 // Plays a sound that ships inside the mod (listed under "files" in mod.json).
 // Tries the real file path first, then the "mod id/name" form.
 static void playModSound(std::string const& name) {
     std::error_code ec;
-    // Geode v6: getResourcesDir() returns asp::fs::Path, convert for std::filesystem
-    auto path = Mod::get()->getResourcesDir().toStdPath() / name;
-    if (std::filesystem::exists(path, ec)) {
+    // Geode v6: getResourcesDir() returns an asp::fs::Path, and toStdPath()
+    // returns a Result, so check it before using the std::filesystem path.
+    auto path = Mod::get()->getResourcesDir() / name;
+    bool found = false;
+    if (auto stdPath = path.toStdPath()) {
+        found = std::filesystem::exists(stdPath.unwrap(), ec);
+    }
+    if (found) {
         auto full = path.string();
         playEffectNow(full.c_str());
     } else {
