@@ -109,11 +109,23 @@ public:
     }
 };
 
+// Geode hands back a pink checkerboard for sprite frames that don't exist, so a
+// plain "is it non-null" check always passes. Compare against a frame that
+// definitely doesn't exist to tell real frames from the checkerboard.
+static bool frameIsReal(char const* name) {
+    auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+    auto frame = cache->spriteFrameByName(name);
+    if (!frame) return false;
+    auto bogus = cache->spriteFrameByName("larp-buttons-frame-that-does-not-exist.png");
+    if (bogus && frame->getTexture() == bogus->getTexture()) return false;
+    return true;
+}
+
 // Uses the first game sprite that exists, otherwise shows text instead.
 static CCNode* frameIcon(std::initializer_list<char const*> names, char const* fallbackText) {
     auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
     for (auto name : names) {
-        if (cache->spriteFrameByName(name)) {
+        if (frameIsReal(name)) {
             auto spr = CCSprite::createWithSpriteFrameName(name);
             spr->setScale(32.f / spr->getContentHeight());
             return spr;
@@ -137,7 +149,7 @@ static std::vector<CCPoint> circlePoints(float r) {
 static CCSprite* firstFrame(std::initializer_list<char const*> names) {
     auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
     for (auto name : names) {
-        if (cache->spriteFrameByName(name)) {
+        if (frameIsReal(name)) {
             return CCSprite::createWithSpriteFrameName(name);
         }
     }
@@ -146,11 +158,20 @@ static CCSprite* firstFrame(std::initializer_list<char const*> names) {
 
 // Black orb with a red X at the top right (and a hidden green check in the same spot).
 // Uses the game's own sprites; falls back to drawn shapes if a sprite isn't found.
-static CCNode* makeBlackOrbIcon(CCNode** xOut, CCNode** checkOut) {
+static CCNode* makeBlackOrbIcon(CCNode** xOut, CCNode** checkOut, bool useSprite) {
     auto holder = CCNode::create();
     holder->setContentSize({44.f, 44.f});
 
-    if (auto orbSpr = firstFrame({"ring_05_001.png"})) {
+    // Ask the game which frame the black orb (object ID 1330) really uses,
+    // instead of guessing a sprite name.
+    CCSprite* orbSpr = nullptr;
+    if (useSprite) {
+        std::string orbFrame = ObjectToolbox::sharedState()->intKeyToFrame(1330);
+        if (!orbFrame.empty()) orbSpr = firstFrame({orbFrame.c_str()});
+        log::info("Black orb frame '{}' usable: {}", orbFrame, orbSpr != nullptr);
+    }
+
+    if (orbSpr) {
         orbSpr->setScale(32.f / orbSpr->getContentHeight());
         orbSpr->setPosition({20.f, 20.f});
         holder->addChild(orbSpr);
@@ -207,7 +228,7 @@ static CCNode* makeBlackOrbIcon(CCNode** xOut, CCNode** checkOut) {
 static CCNode* makeMirrorPortalIcon() {
     auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
     for (auto name : {"portal_05_front_001.png", "portal_06_front_001.png"}) {
-        if (cache->spriteFrameByName(name)) {
+        if (frameIsReal(name)) {
             auto spr = CCSprite::createWithSpriteFrameName(name);
             spr->setColor({190, 90, 255});
             spr->setRotation(270.f); // sideways + upside down
@@ -343,7 +364,7 @@ class $modify(LarpMenu, MenuLayer) {
         CCNode* icon = nullptr;
         auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
         for (auto name : {"diffIcon_01_btn_001.png", "diffIcon_01_001.png"}) {
-            if (cache->spriteFrameByName(name)) {
+            if (frameIsReal(name)) {
                 icon = CCSprite::createWithSpriteFrameName(name);
                 break;
             }
@@ -609,6 +630,8 @@ class $modify(LarpSearch, LevelSearchLayer) {
 // ---------------------------------------------------------------------------
 class $modify(LarpPause, PauseLayer) {
     struct Fields {
+        std::vector<CCMenuItemSpriteExtra*> m_leftButtons;
+        bool m_leftPlaced = false;
         CCNode* m_refreshIcon = nullptr;
         CCNode* m_spinner = nullptr;
         bool m_refreshing = false;
@@ -631,22 +654,17 @@ class $modify(LarpPause, PauseLayer) {
         menu->setID("larp-buttons-menu"_spr);
         this->addChild(menu, 100);
 
-        // Left column. Join the pause menu's own left column (the one other mods
-        // use) so our buttons line up with theirs instead of overlapping them.
-        auto side = typeinfo_cast<CCMenu*>(this->getChildByID("left-button-menu"));
-        bool useSide = side && side->getLayout();
-
+        // Left column. Built at a fixed spot first (the old behaviour), then moved
+        // into the pause menu's own left column unless "Fixed Left Column" is on.
+        float leftX = static_cast<float>(mod->getSettingValue<double>("left-column-x"));
         float y = win.height / 2.f + 75.f;
         auto addLeft = [&](CCNode* icon, SEL_MenuHandler cb, std::string const& id) {
             auto btn = CCMenuItemSpriteExtra::create(icon, this, cb);
             btn->setID(id);
-            if (useSide) {
-                side->addChild(btn);
-            } else {
-                btn->setPosition({28.f, y});
-                menu->addChild(btn);
-                y -= 45.f;
-            }
+            btn->setPosition({leftX, y});
+            menu->addChild(btn);
+            y -= 45.f;
+            m_fields->m_leftButtons.push_back(btn);
             return btn;
         };
 
@@ -690,13 +708,20 @@ class $modify(LarpPause, PauseLayer) {
         if (mod->getSettingValue<bool>("enable-black-orb")) {
             CCNode* xMark = nullptr;
             CCNode* checkMark = nullptr;
-            auto icon = makeBlackOrbIcon(&xMark, &checkMark);
+            auto icon = makeBlackOrbIcon(
+                &xMark, &checkMark, mod->getSettingValue<bool>("use-orb-sprite")
+            );
             m_fields->m_orbX = xMark;
             m_fields->m_orbCheck = checkMark;
             addLeft(icon, menu_selector(LarpPause::onBlackOrb), "black-orb-button"_spr);
         }
 
-        if (useSide) side->updateLayout();
+        if (!mod->getSettingValue<bool>("fixed-left-column") && !m_fields->m_leftButtons.empty()) {
+            if (!this->moveLeftToSideMenu()) {
+                // the game's left menu may not have its ID yet, so try once more next frame
+                this->scheduleOnce(schedule_selector(LarpPause::retryMoveLeft), 0.f);
+            }
+        }
 
         // ZucchiniV2 checkbox, far right (does nothing)
         if (mod->getSettingValue<bool>("enable-zucchini")) {
@@ -753,7 +778,7 @@ class $modify(LarpPause, PauseLayer) {
 
             CCNode* icon = nullptr;
             auto cache = CCSpriteFrameCache::sharedSpriteFrameCache();
-            if (cache->spriteFrameByName("GJ_infoIcon_001.png")) {
+            if (frameIsReal("GJ_infoIcon_001.png")) {
                 icon = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
                 icon->setScale(26.f / icon->getContentHeight());
             } else {
@@ -892,6 +917,31 @@ class $modify(LarpPause, PauseLayer) {
         }
     }
 
+    bool moveLeftToSideMenu() {
+        if (m_fields->m_leftPlaced) return true;
+        auto side = typeinfo_cast<CCMenu*>(this->getChildByIDRecursive("left-button-menu"));
+        log::info(
+            "left-button-menu found: {}, has layout: {}",
+            side != nullptr, side && side->getLayout() != nullptr
+        );
+        if (!side || !side->getLayout()) return false;
+
+        for (auto btn : m_fields->m_leftButtons) {
+            if (!btn->getParent()) continue;
+            btn->retain();
+            btn->removeFromParent();
+            side->addChild(btn);
+            btn->release();
+        }
+        side->updateLayout();
+        m_fields->m_leftPlaced = true;
+        return true;
+    }
+
+    void retryMoveLeft(float) {
+        this->moveLeftToSideMenu();
+    }
+
     void setMusicVolume(float v) {
         auto slider = typeinfo_cast<Slider*>(this->getChildByIDRecursive("music-slider"));
         if (slider) {
@@ -977,8 +1027,8 @@ class $modify(LarpPause, PauseLayer) {
             dots->setScale(0.5f);
             spinner = dots;
         }
-        spinner->setPosition(btn->getPosition());
-        btn->getParent()->addChild(spinner);
+        spinner->setPosition({btn->getContentWidth() / 2.f, btn->getContentHeight() / 2.f});
+        btn->addChild(spinner);
         m_fields->m_spinner = spinner;
 
         this->scheduleOnce(schedule_selector(LarpPause::onRefreshDone), 2.f);
