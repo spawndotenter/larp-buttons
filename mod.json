@@ -132,6 +132,26 @@
       "description": "Search page, next to the X. Opens a profile.",
       "default": true
     },
+    "fixed-left-column": {
+      "type": "bool",
+      "name": "Fixed Left Column",
+      "description": "Off (default): left-side pause buttons join the game's left button column, like other mods. On: put them at a fixed spot instead.",
+      "default": false
+    },
+    "left-column-x": {
+      "type": "float",
+      "name": "Fixed Column Position",
+      "description": "Only used when Fixed Left Column is on. Distance from the left edge.",
+      "default": 28,
+      "min": 20,
+      "max": 120
+    },
+    "use-orb-sprite": {
+      "type": "bool",
+      "name": "Use Game Sprite For Black Orb",
+      "description": "Turn this off to draw the black orb yourself if the game sprite shows up as a pink checkerboard.",
+      "default": true
+    },
     "enable-black-orb": {
       "type": "bool",
       "name": "Black Orb",
